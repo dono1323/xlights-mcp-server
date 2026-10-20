@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -20,10 +21,31 @@ class StemPaths(BaseModel):
     available: bool = False
 
 
+def _unsafe_cache_reason(cache_dir: Path) -> str | None:
+    """Return why cache_dir must not hold stems, or None if it is fine."""
+    from xlights_mcp.config import load_config
+
+    resolved = cache_dir.expanduser().resolve()
+    home = Path.home()
+    blocked = [home / "My Drive", home / "Library" / "CloudStorage"]
+    blocked += [Path(p).expanduser() for p in load_config().show_folders.values()]
+    for root in blocked:
+        if resolved.is_relative_to(root.resolve()):
+            return f"cache_dir {resolved} is inside {root}"
+    return None
+
+
+def stem_dir_for(audio_path: Path, cache_dir: Path) -> Path:
+    """Per-song stem folder under cache_dir; never beside the audio file."""
+    digest = hashlib.sha1(str(audio_path.resolve()).encode()).hexdigest()[:8]
+    return cache_dir.expanduser() / f"{audio_path.stem}-{digest}"
+
+
 def separate_stems(
     audio_path: Path,
     output_dir: Path | None = None,
     model: str = "htdemucs",
+    cache_dir: Path | None = None,
 ) -> StemPaths:
     """Separate audio into stems using Demucs.
 
@@ -32,7 +54,8 @@ def separate_stems(
 
     Args:
         audio_path: Path to audio file
-        output_dir: Where to save stems (defaults to audio_cache)
+        output_dir: Where to save stems (defaults to a folder under cache_dir)
+        cache_dir: Stem cache root (defaults to audio.cache_dir from config)
         model: Demucs model name
     """
     try:
@@ -44,8 +67,16 @@ def separate_stems(
         )
         return StemPaths(available=False)
 
+    if cache_dir is None:
+        from xlights_mcp.config import load_config
+
+        cache_dir = load_config().audio.cache_dir
+    reason = _unsafe_cache_reason(output_dir.parent if output_dir else cache_dir)
+    if reason:
+        logger.error(f"Refusing to write stems: {reason}")
+        return StemPaths(available=False)
     if output_dir is None:
-        output_dir = audio_path.parent / "stems" / audio_path.stem
+        output_dir = stem_dir_for(audio_path, cache_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Check cache — vocals is the minimum required stem
