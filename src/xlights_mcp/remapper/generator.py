@@ -27,21 +27,37 @@ logger = logging.getLogger(__name__)
 _REMAPPED_RE = re.compile(r"^(.+?) \(remapped (\d+)\)\.xsq$")
 
 
+def sanitize_base_name(name: str) -> str:
+    """Make a sequence title safe to use as a single file name."""
+    cleaned = re.sub(r"[/\\:\x00-\x1f]", "_", name or "").strip().lstrip(".").strip()
+    return cleaned[:100] or "Sequence"
+
+
 def next_remapped_path(base_name: str, show_folder: Path) -> Path:
     """Determine the next incremented (remapped N).xsq path.
 
     Scans the show folder for existing remapped files and returns the
-    next incremented filename.
+    next incremented filename. The name is sanitized, the result must stay
+    inside show_folder, and an existing file is never returned.
     """
+    base_name = sanitize_base_name(base_name)
     pattern = re.compile(
         rf"^{re.escape(base_name)} \(remapped (\d+)\)\.xsq$"
     )
     max_n = 0
-    for f in show_folder.glob(f"{base_name} (remapped *)*.xsq"):
+    for f in show_folder.iterdir():
         m = pattern.match(f.name)
         if m:
             max_n = max(max_n, int(m.group(1)))
-    return show_folder / f"{base_name} (remapped {max_n + 1}).xsq"
+    n = max_n + 1
+    while True:
+        path = show_folder / f"{base_name} (remapped {n}).xsq"
+        if not path.exists():
+            break
+        n += 1
+    if not path.resolve().is_relative_to(show_folder.resolve()):
+        raise ValueError(f"Output path escapes the show folder: {path}")
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +213,8 @@ def generate_remapped_sequence(
         encoding="utf-8",
         pretty_print=True,
     )
-    output_path.write_bytes(xml_bytes)
+    with open(output_path, "xb") as fh:  # never overwrite
+        fh.write(xml_bytes)
 
     logger.info(f"Wrote remapped sequence: {output_path}")
     return output_path, missing_assets, asset_warnings
