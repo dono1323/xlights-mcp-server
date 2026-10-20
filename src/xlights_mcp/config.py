@@ -18,9 +18,16 @@ AUDIO_CACHE_DIR = CONFIG_DIR / "audio_cache"
 class FPPConfig(BaseModel):
     """Falcon Pi Player connection settings."""
 
+    enabled: bool = False  # FPP calls are refused unless a config opts in
     host: str = "fpp.local"
     port: int = 80
     timeout: float = 10.0
+
+
+FPP_DISABLED_ERROR = (
+    "FPP is disabled. Set fpp.enabled to true (and fpp.host) in "
+    "~/.xlights-mcp/config.json to allow FPP calls."
+)
 
 
 class AudioConfig(BaseModel):
