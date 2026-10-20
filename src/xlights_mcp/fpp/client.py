@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 
 import httpx
 
-from xlights_mcp.config import FPPConfig
+from xlights_mcp.config import FPP_DISABLED_ERROR, FPPConfig
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,8 @@ def _base_url(config: FPPConfig) -> str:
 
 def _get(config: FPPConfig, path: str) -> dict:
     """Make a GET request to the FPP API."""
+    if not config.enabled:
+        return {"error": FPP_DISABLED_ERROR}
     url = f"{_base_url(config)}/api{path}"
     try:
         resp = httpx.get(url, timeout=config.timeout)
@@ -32,6 +35,8 @@ def _get(config: FPPConfig, path: str) -> dict:
 
 def _post(config: FPPConfig, path: str, data: dict | None = None) -> dict:
     """Make a POST request to the FPP API."""
+    if not config.enabled:
+        return {"error": FPP_DISABLED_ERROR}
     url = f"{_base_url(config)}/api{path}"
     try:
         resp = httpx.post(url, json=data, timeout=config.timeout)
@@ -69,7 +74,7 @@ def list_playlists(config: FPPConfig) -> dict:
 def start_playlist(config: FPPConfig, name: str, repeat: bool = False) -> dict:
     """Start a playlist on FPP."""
     repeat_val = "1" if repeat else "0"
-    return _get(config, f"/playlist/{name}/start/{repeat_val}")
+    return _get(config, f"/playlist/{quote(name, safe='')}/start/{repeat_val}")
 
 
 def stop_playback(config: FPPConfig) -> dict:

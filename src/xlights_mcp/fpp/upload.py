@@ -7,9 +7,14 @@ from pathlib import Path
 
 import httpx
 
-from xlights_mcp.config import FPPConfig
+from urllib.parse import quote
+
+from xlights_mcp.config import FPP_DISABLED_ERROR, FPPConfig
 
 logger = logging.getLogger(__name__)
+
+ALLOWED_SEQUENCE_SUFFIXES = {".fseq"}
+ALLOWED_AUDIO_SUFFIXES = {".mp3", ".ogg", ".wav", ".m4a"}
 
 
 def upload_sequence(
@@ -24,6 +29,12 @@ def upload_sequence(
         fseq_path: Path to the .fseq file
         audio_path: Optional path to audio file (.mp3, .ogg)
     """
+    if not config.enabled:
+        return {"error": FPP_DISABLED_ERROR}
+    if fseq_path.suffix.lower() not in ALLOWED_SEQUENCE_SUFFIXES:
+        return {"error": f"Only .fseq files can be uploaded as a sequence: {fseq_path.name}"}
+    if audio_path and audio_path.suffix.lower() not in ALLOWED_AUDIO_SUFFIXES:
+        return {"error": f"Unsupported audio type: {audio_path.name}"}
     if not fseq_path.exists():
         return {"error": f"File not found: {fseq_path}"}
 
@@ -34,7 +45,7 @@ def upload_sequence(
     try:
         with open(fseq_path, "rb") as f:
             resp = httpx.post(
-                f"{base_url}/api/sequence/{fseq_path.name}",
+                f"{base_url}/api/sequence/{quote(fseq_path.name, safe='')}",
                 content=f.read(),
                 headers={"Content-Type": "application/octet-stream"},
                 timeout=60.0,
@@ -51,7 +62,7 @@ def upload_sequence(
         try:
             with open(audio_path, "rb") as f:
                 resp = httpx.post(
-                    f"{base_url}/api/file/music/{audio_path.name}",
+                    f"{base_url}/api/file/music/{quote(audio_path.name, safe='')}",
                     content=f.read(),
                     headers={"Content-Type": "application/octet-stream"},
                     timeout=60.0,
