@@ -104,7 +104,11 @@ def full_analysis(
     stems = StemPaths()
     stem_analysis = StemAnalysis()
     try:
-        stems = separate_stems(audio_path)
+        stems = separate_stems(
+            audio_path,
+            model=audio_config.demucs_model,
+            cache_dir=audio_config.cache_dir,
+        )
         if stems.available:
             stem_analysis = analyze_stems(stems, sr=sr)
     except Exception as e:
